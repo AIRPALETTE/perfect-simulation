@@ -1,0 +1,157 @@
+import pandas as pd
+import numpy as np
+weather = pd.read_csv('weather.csv')
+weather.index = weather['Date']
+weather = weather.drop(columns = ['Date'])
+def transition_matrix(data):
+    # number of states
+    n = 1+ max(data)
+    # empty transition matrix
+    M = [[0]*n for i in range(n)]
+    # count number of state changes
+    for (i,j) in zip(data,data[1:]):
+        M[i][j] += 1
+    # convert to probabilities:
+    for row in M:
+        summ = sum(row)
+        if summ > 0:
+            row[:] = [j/summ for j in row]
+    return M
+
+
+# 2015 all cloud conditions/ 365
+weather_2015 = list(weather['Cloud'][3288:3653])
+# 2012-2015 all cloud conditions/ 1461
+weather_2012_2015 = list(weather['Cloud'][2192:3653])
+# 2006-2015 all cloud conditions/ 3653
+weather_2006_2015 = list(weather['Cloud'][:3653])
+
+
+# transition matrix, c, mu, J, K      from 2015
+trans_2015 = transition_matrix(weather_2015)
+for row in trans_2015: print(' '.join('{0:.2f}'.format(x) for x in row))
+trans_2015_matrix = np.array(trans_2015)
+c = trans_2015_matrix.min(0).sum()
+mu = trans_2015_matrix.min(0)/(trans_2015_matrix.min(0).sum())
+J = trans_2015_matrix.min(0)
+for i in range(0,4):
+    J[i+1] += J[i]
+K = trans_2015_matrix - trans_2015_matrix.min(0)
+K[:,0]+=c
+for row in range(len(K)):
+    for column in range(0,4):
+        K[row,column +1] += K[row,column]
+'''
+
+# from 2012-2015
+trans_2012_2015 = transition_matrix(weather_2012_2015)
+for row in trans_2012_2015: print(' '.join('{0:.2f}'.format(x) for x in row))
+trans_2012_2015_matrix = np.array(trans_2012_2015)
+c = trans_2012_2015_matrix.min(0).sum()
+mu = trans_2012_2015_matrix.min(0)/(trans_2012_2015_matrix.min(0).sum())
+J = trans_2012_2015_matrix.min(0)
+for i in range(0,4):
+    J[i+1] += J[i]
+K = trans_2012_2015_matrix - trans_2012_2015_matrix.min(0)
+K[:,0]+=c
+for row in range(len(K)):
+    for column in range(0,4):
+        K[row,column +1] += K[row,column]
+
+# from 2006-2015
+trans_2006_2015 = transition_matrix(weather_2006_2015)
+for row in trans_2006_2015: print(' '.join('{0:.2f}'.format(x) for x in row))
+trans_2006_2015_matrix = np.array(trans_2006_2015)
+c = trans_2006_2015_matrix.min(0).sum()
+mu = trans_2006_2015_matrix.min(0)/(trans_2006_2015_matrix.min(0).sum())
+J = trans_2006_2015_matrix.min(0)
+for i in range(0,4):
+    J[i+1] += J[i]
+K = trans_2006_2015_matrix - trans_2006_2015_matrix.min(0)
+K[:,0]+=c
+for row in range(len(K)):
+    for column in range(0,4):
+        K[row,column +1] += K[row,column]
+'''
+
+
+# generate a sequence of random variables
+np.random.seed(seed=2)
+seq = np.random.uniform(low=0.0, high=1.0, size=3653)
+
+# find regeneration time
+for i in range(len(seq)):
+    if seq[i] < c:
+        break
+reg_time = i
+u_reg_time = seq[reg_time]
+
+# generate X at regeneration time
+X_reg_time = 0
+if u_reg_time < J[0]:
+    pass
+elif u_reg_time <J[1]:
+    X_reg_time = 1
+elif u_reg_time < J[2]:
+    X_reg_time = 2
+elif u_reg_time < J[3]:
+    X_reg_time = 3
+else:
+    X_reg_time = 4
+
+# generate X_0
+last = X_reg_time
+for time in range(reg_time-1, -1,-1):
+    U = seq[time]
+    if U < K[last,0]:
+        last = 0
+    elif U < K[last,1]:
+        last = 1
+    elif U < K[last,2]:
+        last = 2
+    elif U < K[last,3]:
+        last = 3
+    else:
+        last = 4
+X_0 = last
+
+
+# generate a new sequence of uniform random variables for year: 2016
+# X_0 is the prediction for the 2016/1/1
+np.random.seed(seed=11)
+new_seq = np.random.uniform(low=0.0, high=1.0, size=365)
+last = X_0
+prediction = [last]
+for day in range(365):
+    U = new_seq[day]
+    if U < c:
+        if U < J[0]:
+            last = 0
+        elif U <J[1]:
+            last = 1
+        elif U < J[2]:
+            last = 2
+        elif U < J[3]:
+            last = 3
+        else:
+            last = 4
+    else:
+        if U < K[last,0]:
+            last = 0
+        elif U < K[last,1]:
+            last = 1
+        elif U < K[last,2]:
+            last = 2
+        elif U < K[last,3]:
+            last = 3
+        else:
+            last = 4
+    prediction.append(last)
+
+weather_2016 = list(weather['Cloud'][3653:])
+# check accuracy
+count = 0
+for i in range(366):
+    if prediction[i]==weather_2016[i]:
+        count+=1 
+print('The accuracy is ' + str(count/366))
